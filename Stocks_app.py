@@ -28,8 +28,8 @@ st.set_page_config (
 
 # Dashboard title
 st.title("Stock price prediction for the next 5 business days based on real-time data")
-st.text('Note that the loading of the data and running predictions with the models will take\
-a significant amount of time initially. The subsequent interaction with the data should not\
+st.text('Note that the loading of the data and running predictions with the models will take\n\
+a significant amount of time initially. The subsequent interaction with the data should not\n\
 go though the program from the beginning and should take less time.')
 
 # Disclaimer
