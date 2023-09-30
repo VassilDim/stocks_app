@@ -35,7 +35,7 @@ go though the program from the beginning and should take less time.')
 # Disclaimer
 c1, c2, c3 = st.columns([1, 1, 1])
 c1.text("DISCLAIMER:\n This app is for training purposes ONLY!\n Information depicted here is NOT intended as any\n form of financial advice.")
-c3.text("Author: Vassil Dimitrov\nLast updated: 2023-09-25\nLinkedIn: https://www.linkedin.com/in/vassildim/\nGitHub: https://github.com/VassilDim/VassilDim")
+c3.text("Author: Vassil Dimitrov\nLast updated: 2023-09-30\nLinkedIn: https://www.linkedin.com/in/vassildim/\nGitHub: https://github.com/VassilDim/VassilDim")
 #### END
 
 #############################
