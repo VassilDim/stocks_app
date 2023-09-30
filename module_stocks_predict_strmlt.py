@@ -1,6 +1,7 @@
 # Module containing helper functions for stocks
 
 # Import necessary libraries
+import streamlit as st
 # Data manipulation
 import numpy as np
 import pandas as pd
@@ -11,8 +12,15 @@ from datetime import datetime
 # Stats
 from sklearn.metrics import mean_squared_error
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import statsmodels.api as sm
+
+# Deep Learning
+from tensorflow.keras.models import load_model
 
 # Streamlit App
+
+## Process data for time series
+@st.cache_data # Cache processed dataframe
 def process_stock_table (df, specific_date='2020-01-01'):
 
     '''
@@ -55,6 +63,8 @@ def process_stock_table (df, specific_date='2020-01-01'):
 
     return df_final
 
+## Transform column for univariate time series modelling
+@st.cache_data # Cache processed dataframe
 def prep_4_time_series_uv (dat_list, element_history=3, to_predict=5):
 
     '''
@@ -78,6 +88,8 @@ def prep_4_time_series_uv (dat_list, element_history=3, to_predict=5):
     # Return X and y
     return X, y
 
+## Train/Test Split
+@st.cache_data # Cache results
 def train_test_split_transform_uv_LSTM (X_tot, y_tot, n_test):
 
     if n_test > 0:
@@ -106,14 +118,16 @@ def train_test_split_transform_uv_LSTM (X_tot, y_tot, n_test):
         y = np.array(y_tot)
         return X, y
 
-# Define a function to extract the single element from a cell
+## Define a function to extract the single element from a cell
 def extract_single_element(cell_value):
     if isinstance(cell_value, np.ndarray) and len(cell_value) == 1:
         return cell_value[0]
     else:
         return cell_value
 
-def model_predictions_uv_5 (df, X, y, model, n_test, test = True):
+## Obtain univariate predictions (5 days ahead)
+@st.cache_data # Cache results
+def model_predictions_uv_5 (df, X, y, _model, n_test, test = True):
     # Initialize empty lists
     model_preds = []
     dates = []
@@ -138,12 +152,12 @@ def model_predictions_uv_5 (df, X, y, model, n_test, test = True):
         # Obtain timestep for input
         input_sequence = X[i : i+1]
         # Only keep first step of prediction
-        single_step_pred = model.predict(input_sequence)[:, 0, 0]
+        single_step_pred = _model.predict(input_sequence)[:, 0, 0]
         model_preds.append(single_step_pred)
 
     # When reach last input of X - predict for all 5 steps
     input_sequence = X[-1:]
-    multi_step_pred = model.predict(input_sequence)
+    multi_step_pred = _model.predict(input_sequence)
     # Add predictions
     model_preds.extend(multi_step_pred)
 
@@ -160,6 +174,8 @@ def model_predictions_uv_5 (df, X, y, model, n_test, test = True):
 
     return model_pred_df
 
+## Feature Engineering
+@st.cache_data
 def add_daily_pc_volume_pc (df):
     '''
     Adds a new column 'daily_pc' calculating the percent change between
@@ -178,6 +194,8 @@ def add_daily_pc_volume_pc (df):
 
     return df
 
+## Prepare data for multivariate timeseries analysis
+@st.cache_data
 def prep_4_time_series (df, nparray_scaled, element_history=3, to_predict=5):
         '''
         This function takes an np.array of normalized feature (nparray_scaled)
@@ -199,6 +217,8 @@ def prep_4_time_series (df, nparray_scaled, element_history=3, to_predict=5):
 
         return X, y
 
+## Multivariate test/train split
+@st.cache_data
 def train_test_split_transform_LSTM (X_tot, y_tot, n_test):
 
     if n_test > 0:
@@ -226,3 +246,56 @@ def train_test_split_transform_LSTM (X_tot, y_tot, n_test):
         X = X.reshape(X.shape[0], X.shape[1], X.shape[2])
         y = np.array(y_tot)
         return X, y
+
+## Merge initial table with predictions from uv models
+@st.cache_data
+def merge_uv_preds (df_clean, model1_predictions, model2_predictions, model3_predictions, model4_predictions):
+    df_all = df_clean.merge(model1_predictions.add_prefix('model1_'), left_index=True, right_index=True)
+    df_all = df_all.merge(model2_predictions.add_prefix('model2_'), left_index=True, right_index=True)
+    df_all = df_all.merge(model3_predictions.add_prefix('model3_'), left_index=True, right_index=True)
+    df_all = df_all.merge(model4_predictions.add_prefix('model4_'), left_index=True, right_index=True)
+    return df_all
+
+## Add seasonal decomposition
+@st.cache_data
+def season_decomp(df_clean):
+    # Decomposition (day)
+    decomp_days = sm.tsa.seasonal_decompose(df_clean['close'], model = 'additive')
+    # add the decomposition data
+    df_clean["Trend"] = decomp_days.trend
+    df_clean["Seasonal"] = decomp_days.seasonal
+    df_clean["Residual"] = decomp_days.resid
+    return df_clean
+
+
+## Load UV models
+@st.cache_resource
+def load_uv_models():
+    model1 = load_model('stock1_model1_uv.h5')
+    model2 = load_model('stock1_model2_uv.h5')
+    model3 = load_model('stock1_model3_uv.h5')
+    model4 = load_model('stock1_model4_uv.h5')
+    return model1, model2, model3, model4
+
+## Load Ensemble MODELS
+@st.cache_resource
+def load_ens_models():
+    # Load models
+    ens_model1 = load_model('stock1_model1_ens.h5')
+    ens_model2 = load_model('stock1_model2_ens.h5')
+    ens_model3 = load_model('stock1_model3_ens.h5')
+    ens_model4 = load_model('stock1_model4_ens.h5')
+    ens_model5 = load_model('stock1_model5_ens.h5')
+    return ens_model1, ens_model2, ens_model3, ens_model4, ens_model5
+
+## Ensemble Model Predictions:
+@st.cache_data
+def ens_model_predict (X_train, _ens_model):
+    # Prepare for predictions
+    input_4_preds = X_train[-1]
+    input_shape = (1, X_train[-1].shape[0], X_train[-1].shape[1])
+    input_4_preds = input_4_preds.reshape(input_shape)
+    # Make predictions for the next 5 days
+    model_predictions = _ens_model.predict(input_4_preds)
+
+    return model_predictions

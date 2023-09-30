@@ -28,10 +28,13 @@ st.set_page_config (
 
 # Dashboard title
 st.title("Stock price prediction for the next 5 business days based on real-time data")
+st.text('Note that the loading of the data and running predictions with the models will take\
+a significant amount of time initially. The subsequent interaction with the data should not\
+go though the program from the beginning and should take less time.')
 
 # Disclaimer
 c1, c2, c3 = st.columns([1, 1, 1])
-c1.text("DISCLAIMER:\n This app is for training purposes ONLY!\n Information depicted here is NOT intended as any\n form of financial advise.")
+c1.text("DISCLAIMER:\n This app is for training purposes ONLY!\n Information depicted here is NOT intended as any\n form of financial advice.")
 c3.text("Author: Vassil Dimitrov\nLast updated: 2023-09-25\nLinkedIn: https://www.linkedin.com/in/vassildim/\nGitHub: https://github.com/VassilDim/VassilDim")
 #### END
 
@@ -52,23 +55,13 @@ df = get_data()
 # Clean up data
 df_clean = md.process_stock_table(df)
 df_historical = df_clean.copy()
-
-# Decomposition (day)
-decomp_days = sm.tsa.seasonal_decompose(df_clean['close'], model = 'additive')
-# add the decomposition data
-df_clean["Trend"] = decomp_days.trend
-df_clean["Seasonal"] = decomp_days.seasonal
-df_clean["Residual"] = decomp_days.resid
 #### END
 
 
 ## Prep table for modelling ####
 
 # Load univariate models
-model1 = load_model('stock1_model1_uv.h5')
-model2 = load_model('stock1_model2_uv.h5')
-model3 = load_model('stock1_model3_uv.h5')
-model4 = load_model('stock1_model4_uv.h5')
+model1, model2, model3, model4 = md.load_uv_models()
 
 # Obtain univariate predictions:
 n_test=0
@@ -76,41 +69,33 @@ n_test=0
 X, y = md.prep_4_time_series_uv (df_clean['close'], element_history=7, to_predict=5)
 X_train, y_train = md.train_test_split_transform_uv_LSTM (X, y, n_test)
 # Obtain predictions MODEL1
-model1_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, model1, n_test=0, test=False)
+model1_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, _model=model1, n_test=0, test=False)
 
 # Obtain input sequences MODEL2 uv
 X, y = md.prep_4_time_series_uv (df_clean['close'], element_history=2, to_predict=5)
 X_train, y_train = md.train_test_split_transform_uv_LSTM(X, y, n_test)
 # Obtain predictions MODEL2
-model2_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, model2, n_test=0, test=False)
+model2_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, _model=model2, n_test=0, test=False)
 
 # Obtain input sequences MODEL3 uv
 X, y = md.prep_4_time_series_uv (df_clean['close'], element_history=3, to_predict=5)
 X_train, y_train = md.train_test_split_transform_uv_LSTM (X, y, n_test)
 # Obtain predictions MODEL3
-model3_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, model3, n_test=0, test=False)
+model3_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, _model=model3, n_test=0, test=False)
 
 # Obtain input sequences MODEL4 uv
 X, y = md.prep_4_time_series_uv (df_clean['close'], element_history=5, to_predict=5)
 X_train, y_train = md.train_test_split_transform_uv_LSTM (X, y, n_test)
 # Obtain predictions MODEL4
-model4_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, model4, n_test=0, test=False)
+model4_predictions = md.model_predictions_uv_5(df_clean, X_train, y_train, _model=model4, n_test=0, test=False)
 
-# Update table:
-df_all = df_clean.merge(model1_predictions.add_prefix('model1_'),
-                  left_index=True, right_index=True)
-df_all = df_all.merge(model2_predictions.add_prefix('model2_'),
-                  left_index=True, right_index=True)
-df_all = df_all.merge(model3_predictions.add_prefix('model3_'),
-                  left_index=True, right_index=True)
-df_all = df_all.merge(model4_predictions.add_prefix('model4_'),
-                  left_index=True, right_index=True)
+# Add uv model predictions:
+df_all = md.merge_uv_preds(df_clean, model1_predictions, model2_predictions,
+model3_predictions, model4_predictions)
 
 # Feature engineering and cleanup
-df = md.add_daily_pc_volume_pc(df_all)
-df_clean = df.copy()
-df_all = df.copy()
-df_all.drop(columns = ['open', 'volume', 'high', 'low', 'Trend', 'Seasonal', 'Residual'], inplace=True)
+df_all = md.add_daily_pc_volume_pc(df_all)
+df_all.drop(columns = ['open', 'volume', 'high', 'low'], inplace=True)
 
 # Normalize values
 # Initialize a standard scaler
@@ -120,68 +105,44 @@ df_all_scaled = scaler.fit_transform (df_all)
 #### END
 
 ## MAKE PREDICTIONS WITH ENSEMBLE MODELS ####
-# Load models
-ens_model1 = load_model('stock1_model1_ens.h5')
-ens_model2 = load_model('stock1_model2_ens.h5')
-ens_model3 = load_model('stock1_model3_ens.h5')
-ens_model4 = load_model('stock1_model4_ens.h5')
-ens_model5 = load_model('stock1_model5_ens.h5')
+# Load models:
+ens_model1, ens_model2, ens_model3, ens_model4, ens_model5 = md.load_ens_models()
 
 # Make predictions
 # Obtain Timesteps MODEL 1 ens
 X, y = md.prep_4_time_series (df_all, df_all_scaled, element_history=4)
 # Do not split into test and train
 X_train, y_train = md.train_test_split_transform_LSTM (X, y, n_test=0)
-# Prepare for predictions
-input_4_preds = X_train[-1]
-input_shape = (1, X_train[-1].shape[0], X_train[-1].shape[1])
-input_4_preds = input_4_preds.reshape(input_shape)
-# Make predictions for the next 5 days
-model1_predictions = ens_model1.predict(input_4_preds)
+# Obtain predictions:
+model1_predictions = md.ens_model_predict(X_train, _ens_model=ens_model1)
 
 # Obtain Timesteps MODEL 2 ens
 X, y = md.prep_4_time_series (df_all, df_all_scaled, element_history=2)
 # Split into test (100) and train
 X_train, y_train = md.train_test_split_transform_LSTM (X, y, n_test=0)
-# Prepare for predictions
-input_4_preds = X_train[-1]
-input_shape = (1, X_train[-1].shape[0], X_train[-1].shape[1])
-input_4_preds = input_4_preds.reshape(input_shape)
-# Make predictions for the next 5 days
-model2_predictions = ens_model2.predict(input_4_preds)
+# Obtain predictions:
+model2_predictions = md.ens_model_predict(X_train, _ens_model=ens_model2)
 
 # Obtain Timesteps MODEL 3 ens
 X, y = md.prep_4_time_series (df_all, df_all_scaled, element_history=3)
 # Split into test (100) and train
 X_train, y_train = md.train_test_split_transform_LSTM (X, y, n_test=0)
-# Prepare for predictions
-input_4_preds = X_train[-1]
-input_shape = (1, X_train[-1].shape[0], X_train[-1].shape[1])
-input_4_preds = input_4_preds.reshape(input_shape)
-# Make predictions for the next 5 days
-model3_predictions = ens_model3.predict(input_4_preds)
+# Obtain predictions:
+model3_predictions = md.ens_model_predict(X_train, _ens_model=ens_model3)
 
 # Obtain Timesteps MODEL 4 ens
 X, y = md.prep_4_time_series (df_all, df_all_scaled, element_history=4)
 # Split into test (100) and train
 X_train, y_train = md.train_test_split_transform_LSTM (X, y, n_test=0)
-# Prepare for predictions
-input_4_preds = X_train[-1]
-input_shape = (1, X_train[-1].shape[0], X_train[-1].shape[1])
-input_4_preds = input_4_preds.reshape(input_shape)
-# Make predictions for the next 5 days
-model4_predictions = ens_model4.predict(input_4_preds)
+# Obtain predictions:
+model4_predictions = md.ens_model_predict(X_train, _ens_model=ens_model4)
 
 # Obtain Timesteps MODEL 5 ens
 X, y = md.prep_4_time_series (df_all, df_all_scaled, element_history=16)
 # Split into test (100) and train
 X_train, y_train = md.train_test_split_transform_LSTM (X, y, n_test=0)
-# Prepare for predictions
-input_4_preds = X_train[-1]
-input_shape = (1, X_train[-1].shape[0], X_train[-1].shape[1])
-input_4_preds = input_4_preds.reshape(input_shape)
-# Make predictions for the next 5 days
-model5_predictions = ens_model5.predict(input_4_preds)
+# Obtain predictions:
+model5_predictions = md.ens_model_predict(X_train, _ens_model=ens_model5)
 #### END
 
 
@@ -214,14 +175,8 @@ selected_columns = st.multiselect("Select values to plot", df_historical.columns
 if selected_columns: # Check that at least 1 selected
 
     # Create Streamlit widgets for y-axis range
-    y_min = st.number_input("y-min",\
-    min_value=df_historical[selected_columns].min().min(),\
-    max_value=df_historical[selected_columns].max().max(),\
-    value=df_historical[selected_columns].min().min())
-    y_max = st.number_input("y-max",\
-    min_value=df_historical[selected_columns].min().min(),\
-    max_value=df_historical[selected_columns].max().max(),\
-    value=df_historical[selected_columns].max().max())
+    y_min = st.number_input("y-min", value=df_historical[selected_columns].min().min())
+    y_max = st.number_input("y-max", value=df_historical[selected_columns].max().max())
 
     # Create plotly with multiple lines for each figure
     fig = go.Figure()
@@ -305,6 +260,8 @@ with col2:
 #### END
 
 ## Trend and seasonal decomposition graphs (choose between trend, seasonality and residuals) ####
+df_historical = md.season_decomp(df_historical)
+
 cols = ["Trend", "Seasonal", "Residual"]
 colors = ['turquoise', 'pink', 'red']
 
@@ -315,8 +272,8 @@ col1, col2, col3 = st.columns(3)
 
 # Create and display each plot side-by-side horizontally
 for i, col in enumerate(cols):
-    figa = go.Figure(go.Scatter(x=df_clean.index,
-                                y=df_clean[col],
+    figa = go.Figure(go.Scatter(x=df_historical.index,
+                                y=df_historical[col],
                                 name=col,
                                 line=dict(color=colors[i])
                                ))
